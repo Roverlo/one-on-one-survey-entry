@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>一对一沟通问卷</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <main class="page form-page shell">
+    <header class="masthead compact">
+      <div>
+        <span class="eyebrow">GitHub Pages / Survey Intake</span>
+        <h1 data-survey-title>一对一沟通问卷</h1>
+        <p class="lede" data-hero-copy>请填写完整姓名，系统会匹配名单并打开你的专属题目。</p>
+      </div>
+    </header>
+
+    <section class="split" data-identify-panel>
+      <form class="panel stack callout" data-identify-form>
+        <div>
+          <h2>进入问卷</h2>
+          <p class="fineprint">姓名需要和名单完全一致。</p>
+        </div>
+        <p class="error" data-identify-error hidden></p>
+        <div>
+          <label for="name">完整姓名</label>
+          <input id="name" name="name" autocomplete="name" placeholder="请输入你的全名" required>
+        </div>
+        <button class="btn paper" type="submit">打开我的题目</button>
+      </form>
+
+      <aside class="panel stack">
+        <h2>提交说明</h2>
+        <p>问卷开放期间可以再次进入并覆盖上一次提交内容。</p>
+        <p class="fineprint">提交后会直接进入收集系统，不需要下载或导出文件。</p>
+      </aside>
+    </section>
+
+    <section class="panel progress-console" aria-label="填写进度" data-progress-panel hidden>
+      <div class="progress-head">
+        <strong id="wizardProgress">第 1 / 10 题</strong>
+        <span id="wizardFilled" class="fineprint">0 / 10 已填写</span>
+      </div>
+      <div class="progress-track" aria-hidden="true">
+        <span id="wizardBar"></span>
+      </div>
+      <div class="question-nav" aria-label="题目导航" data-question-nav></div>
+      <p class="fineprint status-hint">绿色表示已填写，橘色表示打开过但仍为空；空题也可以提交。</p>
+    </section>
+
+    <p id="wizardMessage" class="wizard-message" hidden></p>
+
+    <form class="stack survey-wizard" data-survey-wizard hidden novalidate>
+      <section class="wizard-footer">
+        <button class="btn secondary" type="button" id="wizardPrev">上一题</button>
+        <button class="btn" type="button" id="wizardNext">下一题</button>
+        <button class="btn" type="submit" id="wizardSubmit">提交问卷</button>
+      </section>
+    </form>
+
+    <section class="panel stack callout" data-thanks-panel hidden>
+      <div class="finish-mark">✓</div>
+      <div>
+        <span class="eyebrow">Submitted</span>
+        <h1>已提交</h1>
+        <p data-thanks-copy>你的问卷已提交。</p>
+        <p class="fineprint">如需修改，可在问卷开放期间重新打开链接并提交。</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/pages_survey.js"></script>
+</body>
+</html>

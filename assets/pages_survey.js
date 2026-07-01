@@ -7,6 +7,8 @@
   const identifyPanel = document.querySelector("[data-identify-panel]");
   const identifyForm = document.querySelector("[data-identify-form]");
   const identifyError = document.querySelector("[data-identify-error]");
+  const fallbackLink = document.querySelector("[data-fallback-link]");
+  const serverEntryLink = document.querySelector("[data-server-entry-link]");
   const surveyTitle = document.querySelector("[data-survey-title]");
   const heroCopy = document.querySelector("[data-hero-copy]");
   const progressPanel = document.querySelector("[data-progress-panel]");
@@ -31,11 +33,17 @@
   let index = 0;
   let storageKey = "";
   const visited = new Set([0]);
+  const serverEntryUrl = apiBaseUrl && surveySlug ? apiBaseUrl + "/s/" + encodeURIComponent(surveySlug) : "";
+
+  if (serverEntryLink && serverEntryUrl) {
+    serverEntryLink.href = serverEntryUrl;
+  }
 
   function setError(text) {
     if (!identifyError) return;
     identifyError.textContent = text || "";
     identifyError.hidden = !text;
+    if (fallbackLink) fallbackLink.hidden = !text || !serverEntryUrl;
   }
 
   function setMessage(text, tone) {
@@ -112,7 +120,8 @@
     if (bar) bar.style.width = `${Math.round((answered / Math.max(steps.length, 1)) * 100)}%`;
 
     navButtons.forEach((button, buttonIndex) => {
-      const filled = Boolean(textareas[buttonIndex]?.value.trim());
+      const textarea = textareas[buttonIndex];
+      const filled = Boolean(textarea && textarea.value.trim());
       const isVisited = visited.has(buttonIndex);
       button.classList.toggle("active", buttonIndex === index);
       button.classList.toggle("filled", filled);
@@ -207,7 +216,7 @@
     participant = data.participant;
     submitToken = data.submit_token;
     questions = data.questions || [];
-    if (data.survey?.title && surveyTitle) surveyTitle.textContent = data.survey.title;
+    if (data.survey && data.survey.title && surveyTitle) surveyTitle.textContent = data.survey.title;
     if (heroCopy) heroCopy.textContent = `${participant.name}，一次只看一道题。可以先跳过，最后通过题号颜色检查哪些已经填写、哪些还空着。`;
     identifyPanel.hidden = true;
     renderQuestions();
@@ -220,7 +229,7 @@
       setError("问卷链接配置不完整，请联系发放人。");
       return;
     }
-    const name = new FormData(identifyForm).get("name");
+    const name = String(new FormData(identifyForm).get("name") || "").trim();
     const restore = setBusy(identifyForm.querySelector("button[type='submit']"), "打开中...");
     try {
       const data = await postJson(`/api/public/surveys/${encodeURIComponent(surveySlug)}/identify`, { name });
@@ -259,10 +268,10 @@
     }
   }
 
-  prevButton?.addEventListener("click", () => showStep(index - 1));
-  nextButton?.addEventListener("click", () => showStep(index + 1));
-  identifyForm?.addEventListener("submit", identify);
-  form?.addEventListener("submit", submitAnswers);
+  if (prevButton) prevButton.addEventListener("click", () => showStep(index - 1));
+  if (nextButton) nextButton.addEventListener("click", () => showStep(index + 1));
+  if (identifyForm) identifyForm.addEventListener("submit", identify);
+  if (form) form.addEventListener("submit", submitAnswers);
 
   if (!surveySlug) {
     setError("缺少问卷编号，请使用发放人提供的完整链接。");

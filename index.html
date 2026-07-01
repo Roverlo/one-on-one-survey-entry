@@ -21,9 +21,14 @@
       <form class="panel stack callout" data-identify-form>
         <div>
           <h2>进入问卷</h2>
-          <p class="fineprint">姓名需要和名单完全一致。</p>
+          <p class="fineprint">填写姓名即可进入；如果带了空格或工号，系统会尽量自动识别。</p>
         </div>
         <p class="error" data-identify-error hidden></p>
+        <p class="fineprint fallback-link" data-fallback-link hidden>
+          如果这里一直打不开，可以点
+          <a data-server-entry-link href="#" rel="noopener">备用入口</a>
+          再输入姓名。
+        </p>
         <div>
           <label for="name">完整姓名</label>
           <input id="name" name="name" autocomplete="name" placeholder="请输入你的全名" required>

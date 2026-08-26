@@ -1,0 +1,177 @@
+name: Temporary exact X video download
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download each status top-level video
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output debug
+
+          cat > /tmp/download-x-videos.mjs <<'JS'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+
+          const items = [
+            ['2092533979673178520', 'santoulang-2092533979673178520.mp4'],
+            ['2092545724454142278', 'santoulang-2092545724454142278.mp4'],
+          ];
+
+          function getToken(id) {
+            return ((Number(id) / 1e15) * Math.PI)
+              .toString(36)
+              .replace(/(0+|\.)/g, '');
+          }
+
+          function collectTopLevelVariants(tweet) {
+            const variants = [];
+            const add = (candidate, source) => {
+              if (!candidate || typeof candidate !== 'object') return;
+              const url = candidate.url || candidate.src;
+              const type = candidate.content_type || candidate.type || '';
+              if (typeof url === 'string' && url.includes('.mp4') && (!type || type.includes('mp4'))) {
+                variants.push({
+                  url,
+                  bitrate: Number(candidate.bitrate || 0),
+                  source,
+                });
+              }
+            };
+
+            for (const candidate of tweet?.video?.variants || []) {
+              add(candidate, '$.video.variants');
+            }
+
+            const mediaDetails = Array.isArray(tweet?.mediaDetails) ? tweet.mediaDetails : [];
+            for (let i = 0; i < mediaDetails.length; i += 1) {
+              const media = mediaDetails[i];
+              if (media?.type !== 'video' && media?.type !== 'animated_gif') continue;
+              for (const candidate of media?.video_info?.variants || []) {
+                add(candidate, `$.mediaDetails[${i}].video_info.variants`);
+              }
+            }
+
+            const legacyMedia = [
+              ...(tweet?.extended_entities?.media || []),
+              ...(tweet?.entities?.media || []),
+            ];
+            for (let i = 0; i < legacyMedia.length; i += 1) {
+              const media = legacyMedia[i];
+              if (media?.type !== 'video' && media?.type !== 'animated_gif') continue;
+              for (const candidate of media?.video_info?.variants || []) {
+                add(candidate, `$.legacyMedia[${i}].video_info.variants`);
+              }
+            }
+
+            const unique = new Map();
+            for (const variant of variants) {
+              const previous = unique.get(variant.url);
+              if (!previous || variant.bitrate > previous.bitrate) unique.set(variant.url, variant);
+            }
+            return [...unique.values()].sort((a, b) => b.bitrate - a.bitrate);
+          }
+
+          async function fetchTweet(id) {
+            const tokens = [getToken(id), '0', '!', '123'];
+            const errors = [];
+            for (const token of tokens) {
+              const endpoint = new URL('https://cdn.syndication.twimg.com/tweet-result');
+              endpoint.searchParams.set('id', id);
+              endpoint.searchParams.set('lang', 'en');
+              endpoint.searchParams.set('token', token);
+              try {
+                const response = await fetch(endpoint, {
+                  headers: {
+                    'user-agent': 'Mozilla/5.0 ChatGPT-X-video-downloader/2.0',
+                    accept: 'application/json,text/plain,*/*',
+                  },
+                  redirect: 'follow',
+                });
+                const text = await response.text();
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+                const data = JSON.parse(text);
+                const returnedId = String(data?.id_str || data?.id || '');
+                if (returnedId && returnedId !== id) {
+                  throw new Error(`returned tweet id ${returnedId}`);
+                }
+                return { data, endpoint: endpoint.toString() };
+              } catch (error) {
+                errors.push(`${endpoint}: ${error.message}`);
+              }
+            }
+            throw new Error(`Unable to fetch status ${id}:\n${errors.join('\n')}`);
+          }
+
+          const hashes = [];
+          for (const [id, filename] of items) {
+            const { data, endpoint } = await fetchTweet(id);
+            fs.writeFileSync(`debug/${id}.json`, JSON.stringify(data, null, 2));
+
+            const returnedId = String(data?.id_str || data?.id || id);
+            const variants = collectTopLevelVariants(data);
+            console.log('='.repeat(100));
+            console.log('REQUESTED_STATUS', id);
+            console.log('RETURNED_STATUS', returnedId);
+            console.log('ENDPOINT', endpoint);
+            console.log('TOP_LEVEL_VARIANTS', JSON.stringify(variants, null, 2));
+            if (!variants.length) {
+              throw new Error(`No top-level MP4 variants found for status ${id}`);
+            }
+
+            const selected = variants[0];
+            const response = await fetch(selected.url, {
+              headers: { 'user-agent': 'Mozilla/5.0 ChatGPT-X-video-downloader/2.0' },
+              redirect: 'follow',
+            });
+            if (!response.ok) throw new Error(`Video HTTP ${response.status} for ${id}`);
+            const bytes = Buffer.from(await response.arrayBuffer());
+            if (!bytes.subarray(0, 64).includes(Buffer.from('ftyp'))) {
+              throw new Error(`Downloaded file is not MP4 for ${id}`);
+            }
+            const out = `output/${filename}`;
+            fs.writeFileSync(out, bytes);
+            const hash = crypto.createHash('sha256').update(bytes).digest('hex');
+            hashes.push(hash);
+            console.log('SELECTED_URL', selected.url);
+            console.log('OUTPUT', out, bytes.length, 'bytes', 'SHA256', hash);
+          }
+
+          if (new Set(hashes).size !== hashes.length) {
+            throw new Error(`The downloaded files are identical: ${hashes.join(', ')}`);
+          }
+          JS
+
+          node /tmp/download-x-videos.mjs
+          sha256sum output/*.mp4
+          file output/*.mp4
+          ls -lh output
+
+      - name: Upload correct videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-videos-correct
+          path: output/*.mp4
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: Upload response JSON for verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-video-syndication-json
+          path: debug/*.json
+          if-no-files-found: ignore
+          retention-days: 1

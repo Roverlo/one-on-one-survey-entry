@@ -1,0 +1,95 @@
+name: Download X videos
+
+on:
+  push:
+    branches:
+      - task/download-x-videos-20260826
+
+permissions:
+  contents: read
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download the two public X videos
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+
+          python - <<'PY'
+          import json
+          import pathlib
+          import re
+          import urllib.request
+
+          items = [
+              ("2092533979673178520", "santoulang-video-1.mp4"),
+              ("2092545724454142278", "santoulang-video-2.mp4"),
+          ]
+
+          headers = {
+              "User-Agent": "Mozilla/5.0 ChatGPT-X-video-downloader/1.0",
+              "Accept": "application/json,text/plain,*/*",
+          }
+
+          def collect_mp4_urls(value, found):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      if isinstance(child, str) and child.startswith("http") and ".mp4" in child:
+                          found.append((key, child))
+                      collect_mp4_urls(child, found)
+              elif isinstance(value, list):
+                  for child in value:
+                      collect_mp4_urls(child, found)
+
+          def score(url):
+              match = re.search(r"/(\d+)x(\d+)/", url)
+              pixels = int(match.group(1)) * int(match.group(2)) if match else 0
+              bitrate = 0
+              match = re.search(r"(?:bitrate=|/)(\d{5,8})(?:[/?&]|$)", url)
+              if match:
+                  bitrate = int(match.group(1))
+              return pixels, bitrate, len(url)
+
+          for status_id, filename in items:
+              api_url = f"https://api.fxtwitter.com/status/{status_id}"
+              req = urllib.request.Request(api_url, headers=headers)
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  payload = json.load(response)
+
+              candidates = []
+              collect_mp4_urls(payload, candidates)
+              urls = sorted({url for _, url in candidates}, key=score, reverse=True)
+              if not urls:
+                  raise RuntimeError(f"No MP4 URL found for status {status_id}")
+
+              video_url = urls[0]
+              out = pathlib.Path("output") / filename
+              req = urllib.request.Request(video_url, headers={"User-Agent": headers["User-Agent"]})
+              with urllib.request.urlopen(req, timeout=180) as response, out.open("wb") as target:
+                  while True:
+                      chunk = response.read(1024 * 1024)
+                      if not chunk:
+                          break
+                      target.write(chunk)
+
+              with out.open("rb") as stream:
+                  head = stream.read(32)
+              if b"ftyp" not in head:
+                  raise RuntimeError(f"Downloaded file is not an MP4: {out}")
+              print(f"Downloaded {out} ({out.stat().st_size} bytes) from {video_url}")
+          PY
+
+          ls -lh output
+
+      - name: Upload videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-videos
+          path: output/*.mp4
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1

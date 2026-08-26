@@ -1,7 +1,7 @@
 name: Temporary exact X video download
 
 on:
-  push:
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -48,9 +48,7 @@ jobs:
           import glob
           import hashlib
           import json
-          import os
           import pathlib
-          import sys
 
           expected = [
               pathlib.Path("output/santoulang-2092533979673178520.mp4"),
